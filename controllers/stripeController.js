@@ -92,78 +92,6 @@ exports.deleteProduct = async (productId, priceId) => {
   }
 };
 
-exports.createCustomer = async (req, res) => {
-  const { email, name } = req.body;
-  const user = await User.findOne({ email });
-
-  try {
-    const customer = await stripe.customers.create({
-      email,
-      name,
-    });
-
-    if (customer) {
-      const updatedCustomer = await User.findByIdAndUpdate(
-        user.id,
-        { stripeCustomerId: customer.id },
-        {
-          new: true,
-          runValidators: true,
-        }
-      );
-
-      res.status(200).json({
-        status: "success",
-        message: "Customer created successfully",
-        data: {
-          updatedCustomer,
-        },
-      });
-    }
-  } catch (err) {
-    console.error(`Error while creating a customer: ${err}`);
-    res.status(400).json({
-      status: "failed",
-      message: "Failed to create customer",
-    });
-  }
-};
-
-exports.createSubscription = async (req, res) => {
-  try {
-    const { priceId, userId, subscriptionName } = req.body;
-
-    const subscription = await stripe.subscriptions.create({
-      customer: userId,
-      items: [{ price: priceId }],
-      expand: ["latest_invoice.payment_intent"],
-    });
-
-    const doc = await Subscription.create({
-      subscriptionName,
-      subscriptionId: subscription.id,
-      createdAt: subscription.created,
-      customer: subscription.customer,
-      collectionMethod: subscription.collection_method,
-      billingCycleAnchor: subscription.billing_cycle_anchor,
-    });
-
-    res.status(200).json({
-      status: "success",
-      message: "Subscription created successfully",
-      data: {
-        subscription: doc,
-      },
-    });
-  } catch (err) {
-    console.error("Error creating subscription:", err);
-    res.status(400).json({
-      status: "failed",
-      message: "Failed to create subscription",
-    });
-  }
-};
-
 exports.checkoutSession = async (req, res) => {
   try {
     const { priceId, email } = req.body;
@@ -188,8 +116,8 @@ exports.checkoutSession = async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      success_url: `${req.protocol}://localhost:51/`,
-      cancel_url: `${req.protocol}://localhost:51/subscriptions`,
+      success_url: `${req.protocol}://localhost:5173/`,
+      cancel_url: `${req.protocol}://localhost:5173/#subscriptions`,
       customer_email: email,
       line_items: [
         {
@@ -213,4 +141,45 @@ exports.checkoutSession = async (req, res) => {
       message: "Failed to create checkout session",
     });
   }
+};
+
+exports.webhookCheckout = async (req, res, next) => {
+  const signature = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.log(err.message);
+    return res.status(400).send(`Webhook error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const subscriptionId = event.data.object.subscription;
+    const email = event.data.object.customer_email;
+
+    let subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+    const user = await User.findOne({ email });
+    const product = await Product.findOne({
+      stripeProductId: subscription.plan.product,
+      stripePriceId: subscription.plan.id,
+    });
+
+    const body = {
+      subscription: product.name,
+      messagesLimit: product.metadata.messages,
+    };
+
+    const updatedUser = await User.findByIdAndUpdate(user.id, body, {
+      new: true,
+      runValidators: true,
+    });
+  }
+
+  res.status(200).json({ received: true });
 };

@@ -58,6 +58,14 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  joinedAt: {
+    type: Date,
+    default: Date.now(),
+  },
+  subscription: {
+    type: String,
+    default: "",
+  },
 });
 
 userSchema.pre("save", function (next) {

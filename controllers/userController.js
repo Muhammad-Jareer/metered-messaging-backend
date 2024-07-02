@@ -30,7 +30,7 @@ exports.updateMe = catchAsync(async (req, res, next) => {
   }
 
   // 2) Filtered out unwanted fields names that are not allowed to be updated
-  const filteredBody = filterObj(req.body, "name", "email");
+  const filteredBody = filterObj(req.body, "name", "email", "joinedAt");
 
   if (req.file) filteredBody.photo = req.file.filename;
 
@@ -63,6 +63,22 @@ exports.createUser = (req, res) => {
     message: "This route is not defined! Please use /signup instead",
   });
 };
+
+exports.isUser = catchAsync(async (req, res, next) => {
+  const user = await User.findOne({ email: req.params.email });
+
+  if (user) {
+    res.status(200).json({
+      status: "success",
+      isUser: true,
+    });
+  } else {
+    res.status(200).json({
+      status: "success",
+      isUser: false,
+    });
+  }
+});
 
 exports.getAllUsers = factory.getAll(User);
 exports.getUser = factory.getOne(User);

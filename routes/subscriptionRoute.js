@@ -6,9 +6,8 @@ const stripeController = require("../controllers/stripeController");
 const router = express.Router();
 
 router
-  .route("/create-subscription")
-  .post(authController.protect, stripeController.createSubscription);
-router.route("/create-customer").post(stripeController.createCustomer);
+  .route("/update-messages/:email")
+  .patch(subscriptionController.messageUsed);
 router.route("/checkout-session").post(stripeController.checkoutSession);
 
 module.exports = router;
